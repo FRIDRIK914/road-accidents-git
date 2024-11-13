@@ -1,0 +1,52 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 # Zurich Traffic Accident Dashboard\
+\
+This project is an interactive dashboard analyzing traffic accidents in Zurich. Built with **Quarto** and **Shiny components**, it allows users to explore traffic accident data dynamically, offering interactive filters, maps, and visualizations.\
+\
+---\
+\
+## Data Source\
+\
+The dataset is sourced from the [Open Data Swiss portal](https://opendata.swiss/en/dataset/strassenverkehrsunfalle-mit-personenschaden), which provides detailed records of road traffic accidents involving personal injuries.\
+\
+---\
+\
+## Project Structure\
+\
+To optimize performance and interactivity, the project is divided into two main components:\
+\
+1. **Data Wrangling (`Datawrangling.R`)**\
+   - Pre-processes the raw dataset:\
+    - Data cleaning and filtering.\
+    - Reverse geocoding using the Google API (with unexpected costs \uc0\u55357 \u56876 )\
+    - Saves a processed dataset locally to avoid redundant API calls and high loading times.\
+\
+2. **Dashboard (`roadaccidents2.qmd`)**\
+   - A Quarto document enhanced with Shiny components to enable interactivity.\
+   - Loads the pre-processed data and renders:\
+   - A Leaflet-based map for visualizing accident locations.\
+   - Plotly-based plots for accident trends.\
+   - Shiny widgets for dynamic filtering (e.g., dropdowns, sliders).\
+   - Allows users to:\
+     - Explore where most accidents occur within their postcode.\
+     - Identify streets where accidents happen most frequently.\
+     - Analyze specific types of accidents (e.g., bike-related accidents) in their postcode.\
+\
+---\
+\
+## Tools and Technologies\
+\
+- **Quarto**: Document-based dashboard framework.\
+- **Shiny**: Interactive components for dynamic user interfaces.\
+- **Leaflet**: Maps for visualizing accident locations.\
+- **Plotly**: Interactive plots and graphs.\
+- **Google API**: Reverse geocoding to map coordinates to addresses.\
+\
+---\
+}

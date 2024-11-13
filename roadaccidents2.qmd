@@ -1,0 +1,462 @@
+---
+title: "Road accidents in Zürich"
+format:
+  dashboard:
+    theme: LUX
+server: shiny
+---
+
+```{r include=FALSE}
+#| context: setup
+
+library(shiny)
+library(dplyr)
+library(ggmap)
+library(ggplot2)
+library(leaflet)
+library(leaflet.extras)
+library(leafem)
+library(bslib)
+library(bsicons)
+library(plotly)
+
+
+
+# Load data
+data <- read.csv("caraccidents.csv")
+
+# Extract only the street name without numbers
+data$street_names <- sub(" \\d+.*", "", data$street_address)
+
+
+# Set factor variables
+data <- data %>% mutate(across(
+  c(
+    AccidentType_en, AccidentSeverityCategory_en, AccidentInvolvingPedestrian,
+    AccidentInvolvingBicycle, AccidentInvolvingMotorcycle, RoadType_en,
+    AccidentYear, AccidentMonth, AccidentMonth_en, AccidentWeekDay_en,
+    AccidentHour_text
+  ),
+  as.factor
+))
+
+
+
+
+
+```
+
+# Accident Overview
+ 
+
+## {.sidebar}
+
+```{r}
+# Sidebar filter inputs with as.character() for appropriate values
+selectInput(
+  inputId = "accident_involving",
+  label = "Select accident involvement:",
+  choices = c("All", as.character(unique(data$AccidentInvolving))),
+  selected = "All"
+)
+
+selectInput(
+  inputId = "severity",
+  label = "Select Severity:",
+  choices = c("All", as.character(unique(data$AccidentSeverityCategory_en))),
+  selected = "All"
+)
+
+selectInput(
+  inputId = "postcode",
+  label = "Select Postcode:",
+  choices = c("All", as.character(unique(data$postcode))),
+  selected = "All"
+)
+
+
+```
+
+
+## Column 2
+
+### Row 1 {height=20%}
+
+```{r}
+value_box(
+  title = "Total Accidents",
+  value = textOutput("total_accidents"),
+  showcase = bsicons::bs_icon("bank2"),
+  theme = "primary"
+)
+
+```
+
+
+```{r}
+value_box(
+  title = "Severe Injuries",
+  value = textOutput("severe_injuries"),
+  showcase = bsicons::bs_icon("hospital"),
+  theme = "primary"
+)
+
+```
+
+```{r}
+value_box(
+  title = "Fatal Accidents",
+  value = textOutput("fatal_accidents"),
+  showcase = bsicons::bs_icon("person-x-fill"),
+  theme = "primary"
+)
+```
+
+
+
+### Row2 
+
+
+#### kort
+```{r}
+
+leafletOutput("accident_map")
+
+
+```
+
+#### mynd1 
+```{r}
+# Display a table of accidents by weekday
+plotlyOutput("weekday_table")
+```
+
+```{r}
+# Add a new section for the Accident Type pie chart
+plotlyOutput("accident_severity_pie")
+
+```
+
+# By postcode
+
+## {.sidebar}
+
+```{r}
+# Sidebar filter inputs with as.character() for appropriate values
+selectInput(
+  inputId = "accident_involving2",
+  label = "Select accident involvement:",
+  choices = c("All", as.character(unique(data$AccidentInvolving))),
+  selected = "All"
+)
+
+selectInput(
+  inputId = "severity2",
+  label = "Select Severity:",
+  choices = c("All", as.character(unique(data$AccidentSeverityCategory_en))),
+  selected = "All"
+)
+
+selectInput(
+  inputId = "postcode2",
+  label = "Select Postcode:",
+  choices = c("All", as.character(unique(data$postcode))),
+  selected = "All"
+)
+
+selectInput(
+  inputId = "street_name",
+  label = "Select Streetname:",
+  choices = c("All", as.character(unique(data$street_names))),
+  selected = "All"
+)
+
+
+```
+
+## Column 2
+
+
+
+```{r}
+leafletOutput("accident_map_page2")
+```
+
+
+## fdfa
+
+```{r}
+tableOutput("postcode_tafla")
+```
+
+```{r}
+##tableOutput("streetname_tafla")
+plotlyOutput("top_streets_severity")
+```
+
+
+```{r}
+plotlyOutput("hourly_distribution")
+```
+
+
+```{r}
+#| context: server
+
+
+# Page 1
+
+# Reactive dataset based on user input
+filtered_data<- reactive({
+  data %>%
+    filter(
+      (AccidentInvolving == input$accident_involving | input$accident_involving == "All"),
+      (AccidentSeverityCategory_en == input$severity | input$severity == "All"),
+      (postcode == input$postcode | input$postcode == "All")
+    )
+})
+
+# Total accident count
+output$total_accidents <- renderText({
+  nrow(filtered_data())
+})
+
+# Fatal accident count
+output$fatal_accidents <- renderText({
+  nrow(filtered_data() %>% filter(AccidentSeverityCategory_en == "Accident with fatalities"))
+})
+
+# Severe injuries count
+output$severe_injuries <- renderText({
+  nrow(filtered_data() %>% filter(AccidentSeverityCategory_en == "Accident with severe injuries"))
+})
+
+
+# Render table of accidents by weekday
+output$weekday_table <- renderPlotly({
+  # Prepare data and set weekday levels in the correct order
+  data <- filtered_data() %>%
+    mutate(AccidentWeekDay_en = factor(
+      AccidentWeekDay_en,
+      levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    )) %>%
+    count(AccidentWeekDay_en)  # Count occurrences for each weekday
+  
+  # Create the Plotly bar chart
+  plot_ly(
+    data,
+    x = ~AccidentWeekDay_en,
+    y = ~n,
+    type = 'bar',
+    marker = list(color = 'steelblue')  # Set bar color
+  ) %>%
+    layout(
+      title = "Number of Accidents by Weekday",
+      xaxis = list(title = ""),          # No x-axis title
+      yaxis = list(title = "Accident Count"),
+      bargap = 0.1                        # Optional: Adjusts the gap between bars
+    )%>%
+    config(displayModeBar = FALSE)
+})
+
+
+
+## Accident severity 
+# Ensure AccidentSeverityCategory_en is a factor with levels in the correct order
+data$AccidentSeverityCategory_en <- factor(data$AccidentSeverityCategory_en, levels = c(
+  "Accident with fatalities",
+  "Accident with severe injuries",
+  "Accident with light injuries",
+  "Accident with property damage"
+))
+
+# Define a color palette for accident severity categories
+severity_colors <- c(
+  "Accident with fatalities" = "red",
+  "Accident with severe injuries" = "orange",
+  "Accident with light injuries" = "yellow",
+  "Accident with property damage" = "darkgrey"
+)
+
+# Create a color mapping function for Leaflet
+severity_pal <- colorFactor(palette = severity_colors, domain = data$AccidentSeverityCategory_en)
+
+# Render the Leaflet map with consistent colors
+output$accident_map <- renderLeaflet({
+  leaflet(data = filtered_data()) %>%
+    addTiles() %>%
+    addProviderTiles(providers$Esri.WorldImagery) %>%
+    setView(lng = 8.5417, lat = 47.3769, zoom = 12) %>%
+    addCircleMarkers(
+      lng = ~Longitude,
+      lat = ~Latitude,
+      color = ~severity_pal(AccidentSeverityCategory_en),   # Use the color mapping function
+      fillColor = ~severity_pal(AccidentSeverityCategory_en), # Ensures fill color matches
+      radius = 2,
+      fillOpacity = 0.6,
+      label = ~paste("Severity:", AccidentSeverityCategory_en),
+      popup = ~paste(
+        "Type:", AccidentInvolving, "<br>",
+        "Severity:", AccidentSeverityCategory_en, "<br>",
+        "Time:", AccidentHour_text, "<br>",
+        "Date:", AccidentYear, "-", AccidentMonth
+      )
+    ) %>%
+    addMouseCoordinates()
+})
+
+# Render the pie chart with consistent colors
+output$accident_severity_pie <- renderPlotly({
+  # Aggregate the data by severity category
+  data <- filtered_data() %>%
+    count(AccidentSeverityCategory_en)
+  
+  # Create the Plotly pie chart
+  plot_ly(
+    data,
+    labels = ~AccidentSeverityCategory_en,   # Set the labels to severity categories
+    values = ~n,                             # Set the values to the counts
+    type = 'pie',
+    marker = list(colors = severity_colors), # Apply the custom color palette
+    textinfo = 'none',              # Show both label and percentage on hover
+    hoverinfo = 'label+percent+value'        # Display label, percentage, and value on hover
+  ) %>%
+    layout(
+      title = "Accident Distribution by Severity",
+      showlegend = TRUE,
+      legend = list(title = list(text = "Accident Severity"))
+    )%>%
+    config(displayModeBar = FALSE)
+})
+
+
+                          ##Page 2###
+
+
+# Reactive dataset based on user input
+filtered_data2<- reactive({
+  data %>%
+    filter(
+      (AccidentInvolving == input$accident_involving2 | input$accident_involving2 == "All"),
+      (AccidentSeverityCategory_en == input$severity2 | input$severity2 == "All"),
+      (postcode == input$postcode2 | input$postcode2 == "All"),
+      (street_names == input$street_name | input$street_name == "All")
+     )
+})
+
+
+## postcode talbe
+postcode_data <- reactive({
+  filtered_data2() %>%
+    group_by(postcode) %>%
+    summarize(
+      AccidentCount = n(),  # Count of accidents per postcode
+      Fatal = sum(AccidentSeverityCategory_en == "Accident with fatalities", na.rm = TRUE),  # Count of 
+      Severe = sum(AccidentSeverityCategory_en == "Accident with severe injuries", na.rm = TRUE),
+      Light = sum(AccidentSeverityCategory_en == "	Accident with light injuries", na.rm = TRUE) # 
+    ) %>% arrange(desc(AccidentCount))
+})
+
+## streetname table
+streetname_data <- reactive({
+  filtered_data2() %>%
+    group_by(street_names) %>%
+    summarize(
+      AccidentCount = n(),
+      Fatal = sum(AccidentSeverityCategory_en == "Accident with fatalities", na.rm = TRUE),  # Count of 
+      Severe = sum(AccidentSeverityCategory_en == "Accident with severe injuries", na.rm = TRUE),
+      Light = sum(AccidentSeverityCategory_en == "	Accident with light injuries", na.rm = TRUE)
+      # Count of accidents per postcode
+    ) %>% arrange(desc(AccidentCount)) %>%
+    rename(`Street Name` = street_names) 
+})
+
+# Render the table in the UI
+output$postcode_tafla <- renderTable({
+  postcode_data()
+})
+
+
+# Render the table in the UI
+output$streetname_tafla <- renderTable({
+  streetname_data()
+})
+
+
+# Render the Leaflet map with consistent colors
+output$accident_map_page2<- renderLeaflet({
+  leaflet(data = filtered_data2()) %>%
+    addTiles() %>%
+    addProviderTiles(providers$Esri.WorldImagery) %>%
+    setView(lng = 8.5417, lat = 47.3769, zoom = 12) %>%
+    addCircleMarkers(
+      lng = ~Longitude,
+      lat = ~Latitude,
+      color = ~severity_pal(AccidentSeverityCategory_en),   # Use the color mapping function
+      fillColor = ~severity_pal(AccidentSeverityCategory_en), # Ensures fill color matches
+      radius = 1,
+      fillOpacity = 0.6,
+      label = ~paste("Address:", street_address),
+      popup = ~paste(
+        "Type:", AccidentInvolving, "<br>",
+        "Severity:", AccidentSeverityCategory_en, "<br>",
+        "Time:", AccidentHour_text, "<br>",
+        "Date:", AccidentYear, "-", AccidentMonth
+      )
+    ) %>%
+    addMouseCoordinates()
+})
+
+
+  # Create the Plotly bar chart by time of the day
+output$hourly_distribution <- renderPlotly({
+  # Print the structure of the data to check if it is populated correctly
+  print("Debugging hourly_distribution:")
+  str(filtered_data2())
+  
+  data <- filtered_data2() %>%
+    count(AccidentHour_text)
+  
+  plot_ly(
+    data,
+    x = ~AccidentHour_text,
+    y = ~n,
+    type = 'bar',
+    marker = list(color = 'blue')
+  ) %>%
+    layout(
+      title = "Accident Distribution by Hour",
+      xaxis = list(title = "Hour"),
+      yaxis = list(title = "Number of Accidents")
+    ) %>%
+    config(displayModeBar = FALSE)
+})
+
+
+output$top_streets_severity <- renderPlotly({
+  data <- streetname_data() %>%
+    top_n(10, wt = AccidentCount) %>%
+    arrange(desc(AccidentCount))
+  
+  plot_ly(
+    data,
+    x = ~`Street Name`,
+    y = ~AccidentCount,
+    type = 'bar',
+    color = ~`Fatal`,  # You can choose to color by Fatal, Severe, or Light for differentiation
+    text = ~paste("Fatal:", Fatal, "<br>Severe:", Severe, "<br>Light:", Light),
+    marker = list(severity_colors),
+    hoverinfo = "text"
+  ) %>%
+    layout(
+      title = "Top 10 Streets by Accident Count",
+      xaxis = list(title = "Street Name"),
+      yaxis = list(title = "Number of Accidents"),
+      barmode = 'stack',  # Stack bars to show severity distribution
+      margin = list(b = 100)  # Adjust bottom margin to avoid label overlap
+    )%>%config(displayModeBar = FALSE)
+})
+
+
+```
+
